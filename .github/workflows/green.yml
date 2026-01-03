@@ -26,6 +26,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
           ref: main
+      - name: Resolve author (auto)
+        run: |
+          ACTOR="${{ github.actor }}"
+          ID=$(curl -s https://api.github.com/users/$ACTOR | grep -m1 '\"id\"' | sed -E 's/.*\"id\": ([0-9]+).*/\1/')
+          echo "COMMIT_AUTHOR_NAME=${ACTOR}" >> $GITHUB_ENV
+          echo "COMMIT_AUTHOR_EMAIL=${ID}+${ACTOR}@users.noreply.github.com" >> $GITHUB_ENV
       - name: Prepare branch
         run: |
           git config user.name "${COMMIT_AUTHOR_NAME:-github-actions[bot]}"
