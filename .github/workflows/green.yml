@@ -2,6 +2,12 @@ name: Green Contributions
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/green.yml"
+      - "data/heartbeat.txt"
   schedule:
     - cron: "0 6 * * *"
 
@@ -18,9 +24,12 @@ jobs:
           mkdir -p data
           date -u +"%Y-%m-%dT%H:%M:%SZ" >> data/heartbeat.txt
       - name: Commit
+        env:
+          COMMIT_AUTHOR_NAME: ${{ secrets.COMMIT_AUTHOR_NAME }}
+          COMMIT_AUTHOR_EMAIL: ${{ secrets.COMMIT_AUTHOR_EMAIL }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${COMMIT_AUTHOR_NAME:-github-actions[bot]}"
+          git config user.email "${COMMIT_AUTHOR_EMAIL:-github-actions[bot]@users.noreply.github.com}"
           git add data/heartbeat.txt
           git commit -m "heartbeat" || echo "No changes"
       - name: Push
