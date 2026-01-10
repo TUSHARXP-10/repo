@@ -9,7 +9,10 @@ on:
       - ".github/workflows/green.yml"
       - "data/heartbeat.txt"
   schedule:
-    - cron: "0 6 * * *"
+    # Run 3 times daily: morning, afternoon, night (UTC times)
+    - cron: "0 6 * * *"   # 6:00 UTC (morning)
+    - cron: "0 12 * * *"  # 12:00 UTC (afternoon)
+    - cron: "0 18 * * *"  # 18:00 UTC (night)
 
 permissions:
   contents: write
@@ -37,18 +40,19 @@ jobs:
           git config user.name "${COMMIT_AUTHOR_NAME:-github-actions[bot]}"
           git config user.email "${COMMIT_AUTHOR_EMAIL:-github-actions[bot]@users.noreply.github.com}"
           git pull --rebase origin main || true
-      - name: Create 8 daily commits
+      - name: Create 5 commits per run
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p data
-          # Create 8 commits with unique timestamps
-          for i in $(seq 1 8); do
+          # Create 5 commits with unique timestamps per run
+          # Total: 3 runs * 5 commits = 15 commits daily
+          for i in $(seq 1 5); do
             date -u +"%Y-%m-%dT%H:%M:%SZ" >> data/heartbeat.txt
             git add data/heartbeat.txt
-            git commit -m "heartbeat $i"
+            git commit -m "heartbeat $i: $(date +'%H:%M %Z')"
           done
-          # Push all commits at once
+          # Push all commits at once with retry logic
           for attempt in 1 2 3; do
             git push && break || (
               echo "Push failed, attempt $attempt/3"
