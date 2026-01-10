@@ -61,76 +61,88 @@ jobs:
             )
           done
       
-      # Balance contribution graph with issues and pull requests (run once daily)
-      - name: Create and close daily issue
-        if: github.event.schedule == '0 6 * * *'  # Only run in morning schedule
+      # Balance contribution graph with equal activities across all categories
+      - name: Create and close issues (morning/afternoon)
+        if: github.event.schedule == '0 6 * * *' || github.event.schedule == '0 12 * * *'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          # Create issue
-          ISSUE_TITLE="Daily activity check: $(date +'%Y-%m-%d')"
-          ISSUE_BODY="Automated daily issue to balance contribution graph."
-          ISSUE_NUMBER=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/issues \
-            -d "{\"title\":\"$ISSUE_TITLE\",\"body\":\"$ISSUE_BODY\"}" \
-            | jq -r .number)
-          echo "Created issue #$ISSUE_NUMBER"
-          
-          # Close issue
-          curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER \
-            -d '{"state":"closed"}'
-          echo "Closed issue #$ISSUE_NUMBER"
+          # Create 2 issues per run (total 4 daily)
+          for i in 1 2; do
+            ISSUE_TITLE="Activity check ${i}: $(date +'%Y-%m-%d %H:%M UTC')"
+            ISSUE_BODY="Automated issue to balance contribution graph. Run: $(date +'%H:%M UTC')"
+            ISSUE_NUMBER=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/issues \
+              -d "{\"title\":\"$ISSUE_TITLE\",\"body\":\"$ISSUE_BODY\"}" \
+              | jq -r .number)
+            echo "Created issue #$ISSUE_NUMBER"
+            
+            # Close issue
+            curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER \
+              -d '{"state":"closed"}'
+            echo "Closed issue #$ISSUE_NUMBER"
+            
+            # Small delay to prevent API rate limiting
+            sleep 1
+          done
       
-      - name: Create and merge daily pull request
-        if: github.event.schedule == '0 6 * * *'  # Only run in morning schedule
+      - name: Create and merge pull requests (morning/afternoon)
+        if: github.event.schedule == '0 6 * * *' || github.event.schedule == '0 12 * * *'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          BRANCH_NAME: "daily-update-$(date +'%Y%m%d')"
         run: |
-          # Create feature branch
-          git checkout -b $BRANCH_NAME
-          
-          # Make small change
-          echo "Daily update: $(date +'%Y-%m-%d %H:%M:%S')" >> daily-update.md
-          git add daily-update.md
-          git commit -m "Daily update: $(date +'%Y-%m-%d')"
-          git push -u origin $BRANCH_NAME
-          
-          # Create pull request
-          PR_TITLE="Daily update: $(date +'%Y-%m-%d')"
-          PR_BODY="Automated daily pull request to balance contribution graph."
-          PR_NUMBER=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/pulls \
-            -d "{\"title\":\"$PR_TITLE\",\"body\":\"$PR_BODY\",\"head\":\"$BRANCH_NAME\",\"base\":\"main\"}" \
-            | jq -r .number)
-          echo "Created PR #$PR_NUMBER"
-          
-          # Add approval review
-          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/reviews \
-            -d '{"event":"APPROVE","body":"Approved automated daily update."}'
-          echo "Approved PR #$PR_NUMBER"
-          
-          # Merge pull request
-          curl -s -X PUT -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/merge \
-            -d '{"merge_method":"squash"}'
-          echo "Merged PR #$PR_NUMBER"
-          
-          # Delete branch
-          curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH_NAME
-          echo "Deleted branch $BRANCH_NAME"
-          
-          # Clean up locally
-          git checkout main
-          git branch -D $BRANCH_NAME 2>/dev/null || true
+          # Create 2 PRs per run (total 4 daily)
+          for i in 1 2; do
+            BRANCH_NAME="daily-pr-${i}-$(date +'%Y%m%d-%H%M')"
+            
+            # Create feature branch
+            git checkout -b $BRANCH_NAME
+            
+            # Make unique change
+            echo "PR Update ${i}: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> pr-updates.md
+            git add pr-updates.md
+            git commit -m "PR ${i}: Daily update $(date +'%Y-%m-%d %H:%M UTC')"
+            git push -u origin $BRANCH_NAME
+            
+            # Create pull request
+            PR_TITLE="PR ${i}: Daily update $(date +'%Y-%m-%d %H:%M UTC')"
+            PR_BODY="Automated PR to balance contribution graph. Branch: $BRANCH_NAME"
+            PR_NUMBER=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/pulls \
+              -d "{\"title\":\"$PR_TITLE\",\"body\":\"$PR_BODY\",\"head\":\"$BRANCH_NAME\",\"base\":\"main\"}" \
+              | jq -r .number)
+            echo "Created PR #$PR_NUMBER"
+            
+            # Add approval review (counts as code review)
+            curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/reviews \
+              -d '{"event":"APPROVE","body":"Approved automated PR."}'
+            echo "Approved PR #$PR_NUMBER"
+            
+            # Merge pull request
+            curl -s -X PUT -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/merge \
+              -d '{"merge_method":"squash"}'
+            echo "Merged PR #$PR_NUMBER"
+            
+            # Delete branch
+            curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH_NAME
+            echo "Deleted branch $BRANCH_NAME"
+            
+            # Clean up locally and prepare for next PR
+            git checkout main
+            git branch -D $BRANCH_NAME 2>/dev/null || true
+            
+            # Small delay to prevent API rate limiting
+            sleep 2
+          done
